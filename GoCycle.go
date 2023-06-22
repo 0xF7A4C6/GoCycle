@@ -143,18 +143,21 @@ func (c *Cycle) Remove(Element string) {
 	c.Mutex.Lock()
 	defer c.Mutex.Unlock()
 
-	for i, v := range c.List {
-		if Element == v {
+	for i := 0; i < len(c.List); i++ {
+		if Element == c.List[i] {
 			c.List = append(c.List[:i], c.List[i+1:]...)
+			i--
 		}
 	}
 
-	for i, v := range c.Locked {
-		if Element == v {
+	for i := 0; i < len(c.Locked); i++ {
+		if Element == c.Locked[i] {
 			c.Locked = append(c.Locked[:i], c.Locked[i+1:]...)
+			i--
 		}
 	}
 }
+
 
 func (c *Cycle) LockByTimeout(Element string, Timeout time.Duration) {
 	defer c.Unlock(Element)
