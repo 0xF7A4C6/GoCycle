@@ -2,6 +2,7 @@ package GoCycle
 
 import (
 	"bufio"
+	"fmt"
 	"math/rand"
 	"os"
 	"sync"
@@ -9,23 +10,25 @@ import (
 )
 
 type Cycle struct {
-	Mutex  *sync.Mutex
-	Locked []string
-	List   []string
-	I      int
+	Mutex         *sync.Mutex
+	Locked        []string
+	List          []string
+	I             int
+	WaitForUnlock bool
 
 	WaitTime time.Duration
 }
 
 func New(List *[]string) *Cycle {
 	rand.Seed(time.Now().UnixNano())
-	
+
 	return &Cycle{
-		WaitTime: 50 * time.Millisecond,
-		Mutex:    &sync.Mutex{},
-		Locked:   []string{},
-		List:     *List,
-		I:        0,
+		WaitTime:      50 * time.Millisecond,
+		Mutex:         &sync.Mutex{},
+		Locked:        []string{},
+		List:          *List,
+		I:             0,
+		WaitForUnlock: true,
 	}
 }
 
@@ -35,9 +38,9 @@ func NewFromFile(Path string) (*Cycle, error) {
 		return nil, err
 	}
 	var lines []string
-	
+
 	defer file.Close()
-	defer func () {
+	defer func() {
 		lines = nil
 	}()
 
@@ -51,7 +54,7 @@ func NewFromFile(Path string) (*Cycle, error) {
 
 // Set start index to random value, this is aimed to avoid re-use same value after restarting program..
 func (c *Cycle) RandomiseIndex() {
-	c.I = rand.Intn(len(c.List) - 1) + 1
+	c.I = rand.Intn(len(c.List)-1) + 1
 }
 
 // fuck duplicate code i care dont bully me
@@ -82,20 +85,27 @@ func isInList(List *[]string, Element *string) bool {
 	return false
 }
 
-func (c *Cycle) Next() string {
+func (c *Cycle) Next() (string, error) {
 	c.Mutex.Lock()
 	defer c.Mutex.Unlock()
 
 	for {
+		if len(c.List) == 0 {
+			return "", fmt.Errorf("list is empty")
+		}
+
 		c.I++
 		if c.I >= len(c.List) {
 			c.I = 0
 		}
 
 		if !c.IsLocked(c.List[c.I]) {
-			return c.List[c.I]
+			return c.List[c.I], nil
 		}
 
+		if !c.WaitForUnlock {
+			return "", fmt.Errorf("no match found or every items locked")
+		}
 		time.Sleep(c.WaitTime)
 	}
 }
@@ -140,8 +150,12 @@ func (c *Cycle) ClearDuplicates() int {
 }
 
 func (c *Cycle) Remove(Element string) {
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
+	/*
+		I removed this part because it block while using .next into another goroutine.
+		I need to find a solution
+		c.Mutex.Lock()
+		defer c.Mutex.Unlock()
+	*/
 
 	for i := 0; i < len(c.List); i++ {
 		if Element == c.List[i] {
@@ -157,7 +171,6 @@ func (c *Cycle) Remove(Element string) {
 		}
 	}
 }
-
 
 func (c *Cycle) LockByTimeout(Element string, Timeout time.Duration) {
 	defer c.Unlock(Element)
